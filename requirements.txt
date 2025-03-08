@@ -1,2 +1,4 @@
-python-3.11.6
+Flask
+python-telegram-bot
 requests
+concurrent.futures
