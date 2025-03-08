@@ -1,14 +1,8 @@
-# Use official Python image
-FROM python:3.9
+FROM python:3.11
 
-# Set the working directory
 WORKDIR /app
-
-# Copy all files
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Install dependencies
-RUN pip install -r requirements.txt
-
-# Start the bot
 CMD ["python3", "main.py"]
