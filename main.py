@@ -2,7 +2,6 @@ import requests
 import asyncio
 import random
 import logging
-import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -138,13 +137,18 @@ async def run_telegram_bot():
     await app.run_polling()
     await app.stop()
 
-# Run Telegram bot in a separate thread
-def start_telegram_bot():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_telegram_bot())
+# Start Flask server and Telegram bot
+def start_services():
+    loop = asyncio.get_event_loop()
 
-# Start Flask and Telegram bot in separate threads
+    # Run Flask server
+    from threading import Thread
+    flask_thread = Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False))
+    flask_thread.start()
+
+    # Run Telegram bot in asyncio loop
+    loop.create_task(run_telegram_bot())
+    loop.run_forever()
+
 if __name__ == "__main__":
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False)).start()
-    threading.Thread(target=start_telegram_bot).start()
+    start_services()
