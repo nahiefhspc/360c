@@ -133,9 +133,18 @@ async def run_telegram_bot():
     app.add_handler(CommandHandler("check", op))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    await app.initialize()
+    await app.start()
     await app.run_polling()
+    await app.stop()
+
+# Run Telegram bot in a separate thread
+def start_telegram_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(run_telegram_bot())
 
 # Start Flask and Telegram bot in separate threads
 if __name__ == "__main__":
     threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False)).start()
-    asyncio.run(run_telegram_bot())
+    threading.Thread(target=start_telegram_bot).start()
