@@ -1,20 +1,17 @@
-# Use Python base image
+# Use official Python image
 FROM python:3.10
 
-# Set the working directory
+# Set working directory
 WORKDIR /app
 
-# Copy the project files
-COPY . /app
+# Copy project files
+COPY . .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Set environment variable for Flask
-ENV FLASK_APP=main.py
+# Expose Flask port
+EXPOSE 5000
 
-# Expose port
-EXPOSE 8080
-
-# Run the bot & Flask app
+# Run the bot
 CMD ["python3", "main.py"]
