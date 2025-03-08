@@ -3,9 +3,13 @@ import asyncio
 import random
 import logging
 import threading
+import nest_asyncio
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
+# Apply nest_asyncio to fix event loop issues
+nest_asyncio.apply()
 
 # Flask server for Koyeb
 flask_app = Flask(__name__)
@@ -120,7 +124,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("❌ OTP brute-force failed.")
 
 # Function to run the Telegram bot
-async def run_telegram_bot():
+def run_telegram_bot():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("op", op))
     app.add_handler(CommandHandler("start", op))
@@ -133,25 +137,16 @@ async def run_telegram_bot():
     app.add_handler(CommandHandler("check", op))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    await app.initialize()
-    await app.start()
-
     print("Bot started successfully!")
-
-    try:
-        await app.run_polling()
-    except Exception as e:
-        logging.error(f"Bot error: {e}")
-    finally:
-        await app.stop()
+    app.run_polling()
 
 # Start Flask server and Telegram bot
 def start_services():
     # Start Flask server in a separate thread
     threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False), daemon=True).start()
 
-    # Start Telegram bot in the main thread
-    asyncio.run(run_telegram_bot())
+    # Run Telegram bot in the main thread
+    run_telegram_bot()
 
 if __name__ == "__main__":
     start_services()
