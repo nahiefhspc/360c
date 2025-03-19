@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
 from telegram.error import BadRequest
 
-BOT_TOKEN = "7689660542:AAE5U4OjY3UmutytZK5FsyMKMtK62v3Zq1A"
+BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
