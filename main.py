@@ -40,16 +40,14 @@ async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
     
     if message.startswith('/add'):
-        # Remove '/add' and split by newlines
         entries = message.replace('/add', '').strip().split('\n')
         added_count = 0
         
         for entry in entries:
             entry = entry.strip()
             if not entry:
-                continue  # Skip empty lines
+                continue
             try:
-                # Expect format: 1 - ebooks/... - number - name - email - location
                 parts = entry.split(" - ", 1)
                 key = parts[0].strip()
                 value = parts[1].strip()
@@ -185,28 +183,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     bot = context.bot
 
-    # Check if message is a key in DATA_MAP
     if message in DATA_MAP:
         request_queue.append((chat_id, DATA_MAP[message], message))
         await bot.send_message(chat_id, f"✅ [{message}] Added request to queue. Will process when its turn comes (every 10 minutes).")
     else:
         await bot.send_message(chat_id, f"❌ '{message}' not found! First add data using: `/add\n{message} - ebooks/... - number - name - email - location`", parse_mode="Markdown")
 
-async def process_queue(context: ContextTypes.DEFAULT_TYPE):
-    if request_queue:
-        chat_id, message_data, key = request_queue.popleft()
-        await context.bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
-        await process_login(chat_id, context.bot, message_data, key)
+async def process_queue(bot):
+    while True:
+        if request_queue:
+            chat_id, message_data, key = request_queue.popleft()
+            await bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
+            await process_login(chat_id, bot, message_data, key)
+        await asyncio.sleep(600)  # Wait 10 minutes (600 seconds)
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("add", add_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Schedule queue processing every 10 minutes
-    app.job_queue.run_repeating(process_queue, interval=600, first=0)
-    
     print("🤖 Bot is running...")
+
+    # Start the queue processor in the background
+    bot = app.bot
+    asyncio.create_task(process_queue(bot))
 
     await app.initialize()
     await app.start()
