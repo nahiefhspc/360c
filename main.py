@@ -128,7 +128,7 @@ async def process_login(chat_id, bot, message_data, key):
 
     async def check_otp_with_updates():
         nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=300000) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=250000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
             for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
