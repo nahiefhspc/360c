@@ -214,7 +214,7 @@ async def process_queue(job_context):
             await context.bot.send_message(chat_id, f"⚠️ [{key}] Error processing request: {str(e)}")
         # Schedule the next item if there are more in the queue
         if request_queue:
-            context.job_queue.run_once(process_queue, 600, data=context)  # Next item after 10 minutes
+            context.job_queue.run_once(process_queue, 60, data=context)  # Next item after 10 minutes
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
