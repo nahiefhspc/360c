@@ -6,7 +6,6 @@ import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
-from collections import deque
 
 BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
@@ -21,7 +20,7 @@ HEADERS = {
 
 # Dictionary to store data and queue for processing
 DATA_MAP = {}
-request_queue = deque()
+request_queue = []
 
 # Flask app for Koyeb deployment
 flask_app = Flask(__name__)
@@ -174,10 +173,10 @@ async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if added_count > 0:
             await bot.send_message(chat_id, f"✅ Added {added_count} entries to DATA_MAP successfully!")
             # Immediately process the first entry
-            first_key = sorted(DATA_MAP.keys())[0]  # Get the smallest key (e.g., "1")
+            first_key = sorted(DATA_MAP.keys())[0]
             request_queue.append((chat_id, DATA_MAP[first_key], first_key))
             await bot.send_message(chat_id, f"Starting to process first entry '{first_key}' immediately!")
-            await process_queue(bot)  # Start processing immediately
+            await process_queue(context)  # Process first entry immediately
         else:
             await bot.send_message(chat_id, "❌ No valid entries added! Use format: `key - ebooks/... - number - name - email - location` with each entry on a new line.")
     else:
@@ -191,25 +190,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message in DATA_MAP:
         request_queue.append((chat_id, DATA_MAP[message], message))
         await bot.send_message(chat_id, f"✅ [{message}] Added request to queue. Will process when its turn comes.")
+        if len(request_queue) == 1:  # If this is the only item, process immediately
+            await process_queue(context)
     else:
         await bot.send_message(chat_id, f"❌ '{message}' not found! First add data using: `/add\n{message} - ebooks/... - number - name - email - location`", parse_mode="Markdown")
 
-async def process_queue(bot):
+async def process_queue(context: ContextTypes.DEFAULT_TYPE):
     if request_queue:
-        chat_id, message_data, key = request_queue.popleft()
-        await bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
-        await process_login(chat_id, bot, message_data, key)
-    # Wait 10 minutes only if there are more items in the queue
-    if request_queue:
-        await asyncio.sleep(600)  # 10 minutes
-        await process_queue(bot)
+        chat_id, message_data, key = request_queue.pop(0)  # Use pop(0) to remove from the front
+        await context.bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
+        await process_login(chat_id, context.bot, message_data, key)
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("add", add_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Start the bot
+    # Schedule queue processing every 10 minutes, but allow immediate first run
+    app.job_queue.run_repeating(process_queue, interval=600, first=0)
+    
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
