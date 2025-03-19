@@ -34,36 +34,6 @@ def home():
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8080, debug=False, use_reloader=False)
 
-# Command to add multiple data entries to DATA_MAP
-async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    message = update.message.text.strip()
-    
-    if message.startswith('/add'):
-        entries = message.replace('/add', '').strip().split('\n')
-        added_count = 0
-        
-        for entry in entries:
-            entry = entry.strip()
-            if not entry:
-                continue
-            try:
-                parts = entry.split(" - ", 1)
-                key = parts[0].strip()
-                value = parts[1].strip()
-                DATA_MAP[key] = value
-                added_count += 1
-            except IndexError:
-                await context.bot.send_message(chat_id, f"❌ Invalid format in entry: '{entry}'! Use: `key - ebooks/... - number - name - email - location`", parse_mode="Markdown")
-                continue
-        
-        if added_count > 0:
-            await context.bot.send_message(chat_id, f"✅ Added {added_count} entries to DATA_MAP successfully!")
-        else:
-            await context.bot.send_message(chat_id, "❌ No valid entries added! Use format: `key - ebooks/... - number - name - email - location` with each entry on a new line.")
-    else:
-        await context.bot.send_message(chat_id, "❌ Use /add followed by entries in format:\n`/add\n1 - ebooks/... - number - name - email - location\n2 - ...`", parse_mode="Markdown")
-
 async def process_login(chat_id, bot, message_data, key):
     try:
         ask_me, mobile_number, ask_name, ask_email, ask_loc = map(str.strip, message_data.split(" - "))
@@ -178,6 +148,41 @@ async def process_login(chat_id, bot, message_data, key):
     else:
         await bot.send_message(chat_id, f"❌ [{key}] OTP brute-force failed. Could not find correct OTP.")
 
+async def add_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat_id
+    message = update.message.text.strip()
+    bot = context.bot
+    
+    if message.startswith('/add'):
+        entries = message.replace('/add', '').strip().split('\n')
+        added_count = 0
+        
+        for entry in entries:
+            entry = entry.strip()
+            if not entry:
+                continue
+            try:
+                parts = entry.split(" - ", 1)
+                key = parts[0].strip()
+                value = parts[1].strip()
+                DATA_MAP[key] = value
+                added_count += 1
+            except IndexError:
+                await bot.send_message(chat_id, f"❌ Invalid format in entry: '{entry}'! Use: `key - ebooks/... - number - name - email - location`", parse_mode="Markdown")
+                continue
+        
+        if added_count > 0:
+            await bot.send_message(chat_id, f"✅ Added {added_count} entries to DATA_MAP successfully!")
+            # Immediately process the first entry
+            first_key = sorted(DATA_MAP.keys())[0]  # Get the smallest key (e.g., "1")
+            request_queue.append((chat_id, DATA_MAP[first_key], first_key))
+            await bot.send_message(chat_id, f"Starting to process first entry '{first_key}' immediately!")
+            await process_queue(bot)  # Start processing immediately
+        else:
+            await bot.send_message(chat_id, "❌ No valid entries added! Use format: `key - ebooks/... - number - name - email - location` with each entry on a new line.")
+    else:
+        await bot.send_message(chat_id, "❌ Use /add followed by entries in format:\n`/add\n1 - ebooks/... - number - name - email - location\n2 - ...`", parse_mode="Markdown")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message.text.strip()
     chat_id = update.message.chat_id
@@ -185,29 +190,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if message in DATA_MAP:
         request_queue.append((chat_id, DATA_MAP[message], message))
-        await bot.send_message(chat_id, f"✅ [{message}] Added request to queue. Will process when its turn comes (every 10 minutes).")
+        await bot.send_message(chat_id, f"✅ [{message}] Added request to queue. Will process when its turn comes.")
     else:
         await bot.send_message(chat_id, f"❌ '{message}' not found! First add data using: `/add\n{message} - ebooks/... - number - name - email - location`", parse_mode="Markdown")
 
 async def process_queue(bot):
-    while True:
-        if request_queue:
-            chat_id, message_data, key = request_queue.popleft()
-            await bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
-            await process_login(chat_id, bot, message_data, key)
-        await asyncio.sleep(600)  # Wait 10 minutes (600 seconds)
+    if request_queue:
+        chat_id, message_data, key = request_queue.popleft()
+        await bot.send_message(chat_id, f"Processing request for '{key}': {message_data.split(' - ')[1]}")
+        await process_login(chat_id, bot, message_data, key)
+    # Wait 10 minutes only if there are more items in the queue
+    if request_queue:
+        await asyncio.sleep(600)  # 10 minutes
+        await process_queue(bot)
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("add", add_data))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🤖 Bot is running...")
-
-    # Start the queue processor in the background
-    bot = app.bot
-    asyncio.create_task(process_queue(bot))
-
+    # Start the bot
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
