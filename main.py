@@ -1,4 +1,5 @@
 import requests
+import os
 import time
 import asyncio
 import concurrent.futures
@@ -8,7 +9,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
 from telegram.error import BadRequest
 
-BOT_TOKEN = "7810054325:AAFNvA74woOJL95yU7ZeBHIzI7SatP6d3HE"
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "7689660542:AAE5U4OjY3UmutytZK5FsyMKMtK62v3Zq1A")
 
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
