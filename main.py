@@ -65,8 +65,8 @@ async def process_login(chat_id, bot, message_data, key):
     # Signup
     signup_url = "https://backend-cus.careers360.com/api/1/cus/signup"
     signup_data = {
-        "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5?destination=https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
-        "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
+        "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5?destination=https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=rushikesh_8%20%20%20%20%20%20%20%20&click_location=header",
+        "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=rushikesh_8++++++++&click_location=header",
         "cta_clicked": "signup",
         "country_code": "+91",
         "mobile_number": mobile_number,
@@ -109,8 +109,8 @@ async def process_login(chat_id, bot, message_data, key):
             return None
 
         login_data = {
-            "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5?destination=https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
-            "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=mohit_5&click_location=header",
+            "current_url": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=rushikesh_8?destination=https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=rushikesh_8%20%20%20%20%20%20%20%20&click_location=header",
+            "destination": f"https://engineering.careers360.com/download/{ask_me}?utm_source=telegram&utm_medium=rushikesh_8++++++++&click_location=header",
             "certification": False,
             "cta_clicked": "signup",
             "otp_on": "mobile",
